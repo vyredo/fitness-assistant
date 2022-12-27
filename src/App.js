@@ -6,6 +6,8 @@ import '@tensorflow/tfjs-backend-webgpu';
 // posenet is deprecated, import pose-detection instead
 import * as posedetection from '@tensorflow-models/pose-detection';
 import Webcam from "react-webcam";
+import {drawKeypoints, drawSkeleton} from './utilities'
+
 
 const videoConstraints = {
   width: 800,
@@ -44,7 +46,37 @@ function App() {
     console.log('Posenet Model Loaded..')
     console.log(model)
   },[loadPosenet, model] )
-  
+
+  const canvasRef = useRef()
+
+  const toCamelCase = useCallback((snakeCase) => {
+    return snakeCase.replace(/([-_][a-z])/ig, ($1) => {
+      return $1.toUpperCase()
+        .replace('-', '')
+        .replace('_', '');
+    });
+  },[])
+  const drawCanvas = useCallback((pose, width, height) => {
+    const ctx = canvasRef.current?.getContext('2d')
+    canvasRef.current.width = width ?? 0
+    canvasRef.current.height = height ?? 0
+
+    console.log('what is pose', pose)
+    drawKeypoints(pose[0].keypoints, 0.6, ctx)
+ 
+   
+    // drawSkeletion still use depreacted schema of posenet, we will convert current keypoints to that schema
+    const keyPointsOld = pose[0].keypoints.map((keypoint) => ({
+      position: {
+        x: keypoint.x,
+        y: keypoint.y
+      }, 
+      score: keypoint.score,
+      part: toCamelCase(keypoint.name)
+    }))
+
+    drawSkeleton(keyPointsOld, 0.7, ctx)
+  },[toCamelCase])
   
   
   const poseEstimationLoop = useRef(0)
@@ -60,8 +92,10 @@ function App() {
         decodingMethod: 'single-person'
       })
       console.log(pose)
+
+      drawCanvas(pose, videoWidth, videoHeight)
     },100)
-  }, [model])
+  }, [drawCanvas, model])
   const stopPoseEstimation = useCallback(() => window.clearInterval(poseEstimationLoop.current),[])
   const handlePoseEstimation = useCallback(() =>{
     if(isPoseEstimation){
@@ -72,6 +106,8 @@ function App() {
       setIsPoseEstimation(true)
     }
   }, [isPoseEstimation, startPoseEstimation, stopPoseEstimation])
+
+ 
 
   return (
     <div className="App">
@@ -85,11 +121,8 @@ function App() {
       ref={webcamRef}
       style={{
         position: "absolute",
-        marginLeft: "auto",
-        marginRight: "auto",
-        marginTop: 30,
+        margin: "30px auto 0",
         left: 0,
-        right: 0,
         textAlign: "center",
       }}
         audio={false}
@@ -98,6 +131,14 @@ function App() {
         width={800}
         videoConstraints={videoConstraints}
       />
+      <canvas 
+        style={{
+          position: "absolute",
+          margin: "30px auto 0",
+          left: 0,
+          textAlign: "center"
+        }}
+      ref={canvasRef} width="800" height="600" />
     </div>
   );
 }
